@@ -1,0 +1,1 @@
+https://talostat.github.io/manage_your_stuff/
