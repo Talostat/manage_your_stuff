@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>物件儲存管理系統</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles-clamp.css">
 </head>
 <body>
     <div class="app-container">
@@ -278,7 +278,13 @@
         }
 
         // 渲染混合項目（容器和物件），按時間排序
-        function renderMixedItems(nodes, leafs, level = 0, parentId = null) {
+        function renderMixedItems(nodes, leafs, level = 0, parentId = null, searchText = '') {
+            // 移除過濾邏輯，以便顯示所有兄弟節點
+            // if (searchText) {
+            //     nodes = nodes.filter(n => checkMatch(n, searchText, 'node'));
+            //     leafs = leafs.filter(l => checkMatch(l, searchText, 'leaf'));
+            // }
+
             const items = [
                 ...nodes.map(n => ({ type: 'node', data: n })),
                 ...leafs.map(l => ({ type: 'leaf', data: l }))
@@ -300,7 +306,7 @@
 
             return items.map(item => {
                 if (item.type === 'node') {
-                    return renderNodeCard(item.data, level, parentId);
+                    return renderNodeCard(item.data, level, parentId, searchText);
                 } else {
                     return renderLeafCard(item.data);
                 }
@@ -308,17 +314,19 @@
         }
 
         // 渲染地點列表
-        function renderLocations(searchText = '') {
+        function renderLocations(searchText) {
+            // 如果未提供 searchText，嘗試從輸入框獲取，以保持搜索狀態
+            if (searchText === undefined) {
+                const searchInput = document.getElementById('searchInput');
+                searchText = searchInput ? searchInput.value : '';
+            }
+
             const container = document.getElementById('locationsList');
             let roots = storageData.roots;
 
             // 搜索過濾
             if (searchText) {
-                const searchLower = searchText.toLowerCase();
-                roots = roots.filter(root =>
-                    root.name.toLowerCase().includes(searchLower) ||
-                    (root.description && root.description.toLowerCase().includes(searchLower))
-                );
+                roots = roots.filter(root => checkMatch(root, searchText, 'root'));
             }
 
             if (roots.length === 0) {
@@ -328,6 +336,58 @@
                         <p style="font-size: 12px; margin-top: 10px;">點擊上方 "+ 新增地點" 開始使用</p>
                     </div>
                 `;
+                return;
+            }
+
+            // 如果有搜索關鍵字，展開所有匹配的地點
+            if (searchText) {
+                const html = roots.map(root => {
+                    const itemCount = countRootItems(root.id);
+                    const isSelected = selectedLocationId === root.id;
+                    
+                    const cardHtml = `
+                        <div class="location-grid-item ${isSelected ? 'selected' : ''}"
+                             onclick="selectLocation('${root.id}')"
+                             ondragover="handleDragOver(event)"
+                             ondrop="handleDrop(event, 'root', '${root.id}')">
+                            <div class="location-icon">🏠</div>
+                            <div class="location-name">${root.name}</div>
+                            <div class="location-count">${itemCount} 項</div>
+                            <div class="location-actions">
+                                <button class="btn-mini" onclick="editItem('root', '${root.id}'); event.stopPropagation();" title="編輯">✏️</button>
+                                <button class="btn-mini" onclick="deleteItem('root', '${root.id}'); event.stopPropagation();" title="刪除">🗑️</button>
+                            </div>
+                        </div>
+                    `;
+
+                    let directNodes = storageData.nodes.filter(n => n.parentType === 'root' && n.parentId === root.id);
+                    let directLeafs = storageData.leafs.filter(l => l.parentType === 'root' && l.parentId === root.id);
+
+                    const detailPanel = `
+                        <div class="location-detail-expanded"
+                             ondragover="handleDragOver(event)"
+                             ondrop="handleDrop(event, 'root', '${root.id}')">
+                            <div class="detail-header-inline">
+                                <h4>🏠 ${root.name} (${directNodes.length + directLeafs.length})</h4>
+                                <div class="detail-actions-inline">
+                                    <button class="btn-action-small" onclick="editItem('root', '${root.id}'); event.stopPropagation();">✏️ 編輯</button>
+                                    <button class="btn-action-small danger" onclick="deleteItem('root', '${root.id}'); event.stopPropagation();">🗑️ 刪除</button>
+                                </div>
+                            </div>
+                            <div class="nodes-grid-inline">
+                                ${renderMixedItems(directNodes, directLeafs, 0, root.id, searchText)}
+                                ${directNodes.length === 0 && directLeafs.length === 0 ? '<p class="empty-message">暂無容器或物件</p>' : ''}
+                            </div>
+                            <div class="add-section-inline">
+                                <button class="btn-add-item" onclick="addItemToLocation('${root.id}'); event.stopPropagation();">+ 添加容器/物件</button>
+                            </div>
+                        </div>
+                    `;
+                    
+                    return cardHtml + detailPanel;
+                }).join('');
+                
+                container.innerHTML = html;
                 return;
             }
 
@@ -388,7 +448,7 @@
                             </div>
                         </div>
                         <div class="nodes-grid-inline">
-                            ${renderMixedItems(directNodes, directLeafs, 0, selectedRoot.id)}
+                            ${renderMixedItems(directNodes, directLeafs, 0, selectedRoot.id, searchText)}
                             ${directNodes.length === 0 && directLeafs.length === 0 ? '<p class="empty-message">暂無容器或物件</p>' : ''}
                         </div>
                         <div class="add-section-inline">
@@ -528,13 +588,24 @@
         }
 
         // 渲染節點卡片
-        function renderNodeCard(node, level = 0, parentId = null) {
+        function renderNodeCard(node, level = 0, parentId = null, searchText = '') {
             let childNodes = storageData.nodes.filter(n => n.parentType === 'node' && n.parentId === node.id);
             const childLeafs = storageData.leafs.filter(l => l.parentType === 'node' && l.parentId === node.id);
 
             const itemCount = childNodes.length + childLeafs.length;
             const hasChildren = childNodes.length > 0 || childLeafs.length > 0;
-            const isExpanded = expandedNodes.has(node.id);
+            
+            let isExpanded = expandedNodes.has(node.id);
+            
+            // 如果有搜索關鍵字，且子項目中有匹配，則強制展開
+            if (searchText) {
+                const childrenMatch = [...childNodes, ...childLeafs].some(c => {
+                    if (childNodes.includes(c)) return checkMatch(c, searchText, 'node');
+                    return checkMatch(c, searchText, 'leaf');
+                });
+                if (childrenMatch) isExpanded = true;
+            }
+
             const isSelected = selectedNodeId === node.id;
 
             // 檢查是否為選中節點的祖先
@@ -542,7 +613,7 @@
             const shouldBeFullWidth = isSelected || isAncestorOfSelected || (isExpanded && hasChildren);
 
             let html = `
-                <div class="node-card ${isSelected ? 'selected-node' : ''} ${isAncestorOfSelected ? 'ancestor-node' : ''}"
+                <div class="node-card ${isSelected ? 'selected-node' : ''} ${isAncestorOfSelected ? 'ancestor-node' : ''} ${isExpanded ? 'expanded' : ''}"
                      style="${shouldBeFullWidth ? 'grid-column: 1 / -1;' : ''}"
                      draggable="true"
                      ondragstart="handleDragStart(event, 'node', '${node.id}')"
@@ -573,7 +644,7 @@
                         <div class="node-children-grid"
                              ondragover="handleDragOver(event)"
                              ondrop="handleDrop(event, 'node', '${node.id}')">
-                            ${renderMixedItems(childNodes, childLeafs, level + 1, node.id)}
+                            ${renderMixedItems(childNodes, childLeafs, level + 1, node.id, searchText)}
                             <div class="leaf-card add-item-card" onclick="addItemToNode('${node.id}'); event.stopPropagation();">
                                 <div class="add-icon">+</div>
                             </div>
@@ -1074,6 +1145,12 @@
 
         // 搜索過濾
         function filterLocations(searchText) {
+            // 每次搜尋更新時，重置所有狀態
+            expandedLocations.clear();
+            expandedNodes.clear();
+            selectedLocationId = null;
+            selectedNodeId = null;
+
             renderLocations(searchText);
         }
 
@@ -1272,7 +1349,7 @@
                     document.getElementById('itemQuantity').value = item.quantity || 1;
                 }
 
-                // 隐藏父级选择并移除 required 属性
+                // 隱藏父級選擇並移除 required 屬性
                 const parentField = document.getElementById('parentField');
                 const parentSelect = document.getElementById('parentId');
                 parentField.style.display = 'none';
@@ -1605,6 +1682,35 @@
                 notification.style.transition = 'all 0.3s ease-out';
                 setTimeout(() => notification.remove(), 300);
             }, 2000);
+        }
+
+        // 檢查項目是否匹配搜索關鍵字（包括子項目）
+        function checkMatch(item, searchText, itemType) {
+            if (!searchText) return true;
+            const searchLower = searchText.toLowerCase();
+            
+            // 檢查自身
+            if (item.name.toLowerCase().includes(searchLower) || 
+                (item.description && item.description.toLowerCase().includes(searchLower)) ||
+                (item.tags && item.tags.some(tag => tag.toLowerCase().includes(searchLower)))) {
+                return true;
+            }
+            
+            // 如果是物件(Leaf)，沒有子項目，直接返回 false
+            if (itemType === 'leaf') return false;
+            
+            // 檢查子項目
+            const childrenNodes = storageData.nodes.filter(n => n.parentType === itemType && n.parentId === item.id);
+            const childrenLeafs = storageData.leafs.filter(l => l.parentType === itemType && l.parentId === item.id);
+            
+            for (let child of childrenNodes) {
+                if (checkMatch(child, searchText, 'node')) return true;
+            }
+            for (let child of childrenLeafs) {
+                if (checkMatch(child, searchText, 'leaf')) return true;
+            }
+            
+            return false;
         }
     </script>
 
