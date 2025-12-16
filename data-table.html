@@ -11,6 +11,24 @@
         <!-- 頂部標題欄 -->
         <header class="app-header">
             <h1>📦 物件儲存管理系統</h1>
+            <!-- 統計信息 -->
+            <div class="header-stats">
+                <div class="header-stat-item">
+                    <span class="header-stat-icon">🏠</span>
+                    <span class="header-stat-number" id="headerTotalRoots">0</span>
+                    <span class="header-stat-label">地點</span>
+                </div>
+                <div class="header-stat-item">
+                    <span class="header-stat-icon">📦</span>
+                    <span class="header-stat-number" id="headerTotalNodes">0</span>
+                    <span class="header-stat-label">容器</span>
+                </div>
+                <div class="header-stat-item">
+                    <span class="header-stat-icon">🔖</span>
+                    <span class="header-stat-number" id="headerTotalLeafs">0</span>
+                    <span class="header-stat-label">物件</span>
+                </div>
+            </div>
             <div class="header-actions">
                 <button class="btn btn-icon" onclick="exportToJSON()">💾 導出</button>
                 <button class="btn btn-icon" onclick="document.getElementById('importFile').click()">📂 導入</button>
@@ -24,8 +42,8 @@
         <div class="main-content">
             <!-- 左側：地點列表 -->
             <div class="left-panel">
-                <!-- 統計卡片 -->
-                <div class="stats-bar">
+                <!-- 統計卡片已移到 header 中 -->
+                <div class="stats-bar" style="display: none;">
                     <div class="stat-item">
                         <div class="stat-icon">🏠</div>
                         <div class="stat-info">
@@ -83,11 +101,14 @@
             <!-- 右側：數據輸入表單 -->
             <div class="right-panel">
                 <div class="form-container">
-                    <div class="form-header">
-                        <h3 id="formTitle">➕ 添加項目</h3>
-                        <button class="btn-reset" onclick="resetForm()">🔄 重置</button>
+                    <!-- 標籤頁切換 -->
+                    <div class="tab-header">
+                        <button class="tab-button active" onclick="switchTab('form')" id="formTab">➕ 添加項目</button>
+                        <button class="tab-button" onclick="switchTab('hierarchy')" id="hierarchyTab">🌲 層級構建</button>
                     </div>
 
+                    <!-- 表單標籤頁 -->
+                    <div id="formTabContent" class="tab-content active">
                     <!-- 編輯提示 -->
                     <div class="edit-mode-banner" id="editBanner" style="display: none;">
                         <span id="editBannerText">✏️ 正在編輯</span>
@@ -113,6 +134,14 @@
                             <div class="form-hint">Node 或 Leaf 需要選擇父級</div>
                         </div>
 
+                        <div class="form-group" id="filterLocationField" style="display: none;">
+                            <label for="filterLocationId">限制地點</label>
+                            <select id="filterLocationId" class="form-input" onchange="updateFormFields()">
+                                <option value="">所有地點</option>
+                            </select>
+                            <div class="form-hint">選擇地點以篩選容器選項</div>
+                        </div>
+
                         <div class="form-group">
                             <label for="itemName">名稱 *</label>
                             <input type="text" id="itemName" class="form-input" placeholder="例如: 睡房、衣櫃、睡衣" required>
@@ -132,16 +161,37 @@
                             <label for="tags">標籤</label>
                             <input type="text" id="tags" class="form-input" placeholder="用逗號分隔，例如: 衣服, 冬季">
                         </div>
-
-                        <div class="form-actions">
-                            <button type="submit" class="btn btn-primary btn-large">
-                                💾 保存項目
-                            </button>
-                        </div>
                         <input type="hidden" id="editId">
                         <input type="hidden" id="editType">
                     </form>
 
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary btn-large" onclick="document.getElementById('dataForm').dispatchEvent(new Event('submit'))">
+                            💾 保存項目
+                        </button>
+                        <button type="button" class="btn-reset" onclick="resetForm()" style="margin-left: 10px;">
+                            🔄 重置
+                        </button>
+                    </div>
+                    </div>
+
+                    <!-- 層級構建標籤頁 -->
+                    <div id="hierarchyTabContent" class="tab-content">
+                        <div class="hierarchy-builder">
+                            <div id="hierarchyLevels" class="hierarchy-levels">
+                                <!-- 層級選擇框將在這裡動態生成 -->
+                            </div>
+
+                            <div class="hierarchy-actions">
+                                <button class="btn btn-primary btn-large" onclick="saveHierarchy()">
+                                    💾 保存結構
+                                </button>
+                                <button type="button" class="btn-reset" onclick="resetHierarchy()" style="margin-left: 10px;">
+                                    🔄 重置
+                                </button>
+                            </div>
+                        </div>
+                    </div>
 
                 </div>
             </div>
@@ -164,12 +214,17 @@
         let expandedNodes = new Set();
         let selectedNodeId = null;
 
+        // 層級構建器變量
+        let hierarchyLevels = [];
+        let hierarchyLevelCounter = 0;
+
         // 頁面載入初始化
         document.addEventListener('DOMContentLoaded', function() {
             loadData();
             updateStats();
             renderLocations();
             renderTempStorage();
+            initializeHierarchy();
 
             // 为临时存储区域添加拖放事件监听器
             const tempStorageContent = document.getElementById('tempStorageList');
@@ -258,9 +313,15 @@
 
         // 更新統計
         function updateStats() {
+            // 更新左側 stats-bar（隱藏）
             document.getElementById('totalRoots').textContent = storageData.roots.length;
             document.getElementById('totalNodes').textContent = storageData.nodes.length;
             document.getElementById('totalLeafs').textContent = storageData.leafs.length;
+
+            // 更新 header 中的統計信息
+            document.getElementById('headerTotalRoots').textContent = storageData.roots.length;
+            document.getElementById('headerTotalNodes').textContent = storageData.nodes.length;
+            document.getElementById('headerTotalLeafs').textContent = storageData.leafs.length;
         }
 
         // 獲取排序後的兄弟項目（用於計算插入位置）
@@ -646,11 +707,14 @@
             let html = `
                 <div class="node-card ${isSelected ? 'selected-node' : ''} ${isAncestorOfSelected ? 'ancestor-node' : ''}"
                      style="${shouldBeFullWidth ? 'grid-column: 1 / -1;' : ''}"
-                     draggable="true"
-                     ondragstart="handleDragStart(event, 'node', '${node.id}')"
+                     ${!isExpanded ? 'draggable="true"' : ''}
+                     ${!isExpanded ? `ondragstart="handleNodeDragStart(event, '${node.id}', ${isExpanded})"` : ''}
                      ondragover="handleDragOver(event)"
                      ondrop="handleDrop(event, 'node', '${node.id}')">
-                    <div class="node-card-header" onclick="selectNode('${node.id}', '${parentId || 'root'}'); event.stopPropagation();">
+                    <div class="node-card-header"
+                         ${isExpanded ? 'draggable="true"' : ''}
+                         ${isExpanded ? `ondragstart="handleNodeDragStart(event, '${node.id}', ${isExpanded})"` : ''}
+                         onclick="selectNode('${node.id}', '${parentId || 'root'}'); event.stopPropagation();">
                         ${hasChildren ? `
                             <button class="node-toggle" onclick="toggleNode('${node.id}'); event.stopPropagation();">
                                 ${isExpanded ? '▼' : '▶'}
@@ -801,11 +865,13 @@
             const parentField = document.getElementById('parentField');
             const parentSelect = document.getElementById('parentId');
             const quantityField = document.getElementById('quantityField');
+            const filterLocationField = document.getElementById('filterLocationField');
 
             // 如果是临时存储项目，不需要父级选择
             if (editType === 'temp') {
                 parentField.style.display = 'none';
                 parentSelect.required = false;
+                filterLocationField.style.display = 'none';
 
                 // 臨時存儲如果是 leaf 類型也顯示數量
                 if (itemType === 'leaf') {
@@ -820,16 +886,36 @@
                 parentField.style.display = 'none';
                 parentSelect.required = false;
                 quantityField.style.display = 'none';
+                filterLocationField.style.display = 'none';
             } else if (itemType === 'node') {
                 parentField.style.display = 'block';
                 parentSelect.required = true;
                 quantityField.style.display = 'none';
+                filterLocationField.style.display = 'block';
+                populateFilterLocations();
                 populateParentOptions(itemType);
             } else if (itemType === 'leaf') {
                 parentField.style.display = 'block';
                 parentSelect.required = true;
                 quantityField.style.display = 'block';
+                filterLocationField.style.display = 'none';
                 populateParentOptions(itemType);
+            }
+        }
+
+        // 填充地點篩選選項
+        function populateFilterLocations() {
+            const filterSelect = document.getElementById('filterLocationId');
+            const currentValue = filterSelect.value;
+            filterSelect.innerHTML = '<option value="">所有地點</option>';
+
+            storageData.roots.forEach(root => {
+                filterSelect.innerHTML += `<option value="root-${root.id}">🏠 ${root.name}</option>`;
+            });
+
+            // 恢復之前的選擇
+            if (currentValue) {
+                filterSelect.value = currentValue;
             }
         }
 
@@ -837,17 +923,47 @@
         function populateParentOptions(childType) {
             const parentSelect = document.getElementById('parentId');
             const currentValue = parentSelect.value;
+            const filterLocationId = document.getElementById('filterLocationId')?.value || '';
             parentSelect.innerHTML = '<option value="">請選擇...</option>';
 
             if (childType === 'node') {
                 // Node 可以在 Root 或其他 Node 下
-                storageData.roots.forEach(root => {
-                    parentSelect.innerHTML += `<option value="root-${root.id}">🏠 ${root.name}</option>`;
-                });
-                storageData.nodes.forEach(node => {
-                    const path = getItemPath('node', node.id);
-                    parentSelect.innerHTML += `<option value="node-${node.id}">📦 ${path}</option>`;
-                });
+                // 如果選擇了地點篩選，只顯示該地點和其容器
+                if (filterLocationId) {
+                    const [filterType, filterId] = filterLocationId.split('-');
+                    if (filterType === 'root') {
+                        const root = storageData.roots.find(r => r.id === filterId);
+                        if (root) {
+                            parentSelect.innerHTML += `<option value="root-${root.id}">🏠 ${root.name}</option>`;
+                        }
+                        // 只顯示該地點下的容器
+                        storageData.nodes.forEach(node => {
+                            if (node.parentType === 'root' && node.parentId === filterId) {
+                                const path = getItemPath('node', node.id);
+                                parentSelect.innerHTML += `<option value="node-${node.id}">📦 ${path}</option>`;
+                            }
+                        });
+                    }
+                } else {
+                    // 顯示所有地點和容器
+                    storageData.roots.forEach(root => {
+                        parentSelect.innerHTML += `<option value="root-${root.id}">🏠 ${root.name}</option>`;
+                    });
+                    storageData.nodes.forEach(node => {
+                        const path = getItemPath('node', node.id);
+                        parentSelect.innerHTML += `<option value="node-${node.id}">📦 ${path}</option>`;
+                    });
+                }
+
+                // 如果沒有當前選擇值，默認選擇"未分類"作為父級
+                if (!currentValue) {
+                    const unclassifiedRoot = storageData.roots.find(r => r.name === '未分類');
+                    if (unclassifiedRoot) {
+                        parentSelect.value = `root-${unclassifiedRoot.id}`;
+                    }
+                } else {
+                    parentSelect.value = currentValue;
+                }
             } else if (childType === 'leaf') {
                 // Leaf 可以在 Root 或 Node 下
                 storageData.roots.forEach(root => {
@@ -857,11 +973,11 @@
                     const path = getItemPath('node', node.id);
                     parentSelect.innerHTML += `<option value="node-${node.id}">📦 ${path}</option>`;
                 });
-            }
 
-            // 恢復之前的選擇
-            if (currentValue) {
-                parentSelect.value = currentValue;
+                // 恢復之前的選擇
+                if (currentValue) {
+                    parentSelect.value = currentValue;
+                }
             }
         }
 
@@ -994,6 +1110,19 @@
                 data.parentId = parentId;
             }
 
+            // 處理容器的限制地點
+            if (itemType === 'node') {
+                const filterLocationId = document.getElementById('filterLocationId')?.value || '';
+                if (filterLocationId) {
+                    // 如果選擇了限制地點，將其保存到容器
+                    const [, rootId] = filterLocationId.split('-');
+                    data.restrictedRootId = rootId;
+                } else {
+                    // 如果沒有選擇限制地點，清除該字段
+                    delete data.restrictedRootId;
+                }
+            }
+
             // 編輯或新增
             if (editId && editType) {
                 updateItem(editType, data);
@@ -1030,6 +1159,10 @@
                     data.parentType = array[index].parentType;
                     data.parentId = array[index].parentId;
                 }
+                // 保留原有的容器限制地點（如果新數據中沒有明確設置）
+                if (type === 'node' && !('restrictedRootId' in data) && 'restrictedRootId' in array[index]) {
+                    data.restrictedRootId = array[index].restrictedRootId;
+                }
                 array[index] = data;
             }
         }
@@ -1053,6 +1186,14 @@
 
                 if (type === 'leaf') {
                     document.getElementById('itemQuantity').value = item.quantity || 1;
+                }
+
+                if (type === 'node') {
+                    const filterSelect = document.getElementById('filterLocationId');
+                    if (filterSelect) {
+                        filterSelect.value = item.restrictedRootId ? `root-${item.restrictedRootId}` : '';
+                        populateParentOptions('node');
+                    }
                 }
 
                 if (item.parentType && item.parentId) {
@@ -1417,6 +1558,21 @@
             event.currentTarget.style.opacity = '0.5';
         }
 
+        function handleNodeDragStart(event, nodeId, isExpanded) {
+            // 如果 node 已打開，只能從 header 拖拉
+            if (isExpanded) {
+                // 檢查拖拽起點是否在 header 區域
+                const isFromHeader = event.target.closest('.node-card-header') !== null;
+
+                if (!isFromHeader) {
+                    // 不是從 header 拖拉，阻止拖拽
+                    event.stopPropagation();
+                    return;
+                }
+            }
+            handleDragStart(event, 'node', nodeId);
+        }
+
         function handleDragOver(event) {
             event.preventDefault();
             event.dataTransfer.dropEffect = 'move';
@@ -1712,6 +1868,265 @@
                 notification.style.transition = 'all 0.3s ease-out';
                 setTimeout(() => notification.remove(), 300);
             }, 2000);
+        }
+
+        // ========== 標籤頁切換功能 ==========
+        function switchTab(tabName) {
+            // 切換標籤按鈕狀態
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            if (tabName === 'form') {
+                document.getElementById('formTab').classList.add('active');
+                document.getElementById('formTabContent').classList.add('active');
+            } else if (tabName === 'hierarchy') {
+                document.getElementById('hierarchyTab').classList.add('active');
+                document.getElementById('hierarchyTabContent').classList.add('active');
+            }
+        }
+
+        // ========== 層級構建器功能 ==========
+
+        // 初始化層級構建器
+        function initializeHierarchy() {
+            hierarchyLevels = [];
+            hierarchyLevelCounter = 0;
+            // 默認添加一個層級
+            addHierarchyLevel(null);
+        }
+
+        // 添加新層級（可以指定父層級）
+        function addHierarchyLevel(parentId = null) {
+            const levelId = ++hierarchyLevelCounter;
+            const level = {
+                id: levelId,
+                parentId: parentId,
+                selectedId: null,
+                children: []
+            };
+
+            if (parentId === null) {
+                // 添加到根層級
+                hierarchyLevels.push(level);
+            } else {
+                // 添加為子層級
+                const parent = findLevelById(parentId);
+                if (parent) {
+                    parent.children.push(level);
+                }
+            }
+            renderHierarchyLevels();
+        }
+
+        // 查找層級對象
+        function findLevelById(id, levels = hierarchyLevels) {
+            for (let level of levels) {
+                if (level.id === id) return level;
+                if (level.children && level.children.length > 0) {
+                    const found = findLevelById(id, level.children);
+                    if (found) return found;
+                }
+            }
+            return null;
+        }
+
+        // 移除層級
+        function removeHierarchyLevel(levelId) {
+            function removeFromLevels(levels, id) {
+                for (let i = 0; i < levels.length; i++) {
+                    if (levels[i].id === id) {
+                        levels.splice(i, 1);
+                        return true;
+                    }
+                    if (levels[i].children && removeFromLevels(levels[i].children, id)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            removeFromLevels(hierarchyLevels, levelId);
+            renderHierarchyLevels();
+        }
+
+        // 渲染層級選擇器（遞歸渲染樹狀結構）
+        function renderHierarchyLevels() {
+            const container = document.getElementById('hierarchyLevels');
+
+            if (hierarchyLevels.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #a0aec0;">暫無層級</p>';
+                return;
+            }
+
+            container.innerHTML = renderLevelTree(hierarchyLevels, '');
+        }
+
+        // 獲取選中項的名字
+        function getSelectedItemName(selectedId) {
+            if (!selectedId) return null;
+            const [type, id] = selectedId.split('-');
+            if (type === 'root') {
+                const item = storageData.roots.find(r => r.id === id);
+                return item ? item.name : null;
+            } else if (type === 'node') {
+                const item = storageData.nodes.find(n => n.id === id);
+                return item ? item.name : null;
+            }
+            return null;
+        }
+
+        // 遞歸渲染層級樹
+        function renderLevelTree(levels, parentNumber, parentLevel = null) {
+            return levels.map((level, index) => {
+                const levelNumber = parentNumber ? `${parentNumber}.${index + 1}` : `${index + 1}`;
+                const isTopLevel = !parentNumber;
+                const options = getHierarchyOptionsForLevel(level, isTopLevel, parentLevel);
+                const hasChildren = level.children && level.children.length > 0;
+
+                // 如果有選中項，顯示選項名字；否則顯示層級編號
+                const displayLabel = level.selectedId ? getSelectedItemName(level.selectedId) : levelNumber;
+                const displayIcon = level.selectedId ? (level.selectedId.startsWith('root-') ? '🏠' : '📦') : '';
+
+                return `
+                    <div class="hierarchy-level-container">
+                        <div class="hierarchy-level">
+                            <div class="hierarchy-level-header">
+                                <span class="hierarchy-level-label">${displayIcon} ${displayLabel}</span>
+                                ${!isTopLevel ? `<button class="btn-mini" onclick="removeHierarchyLevel(${level.id})" title="刪除">✕</button>` : ''}
+                            </div>
+                            <select class="hierarchy-select" onchange="handleHierarchyChange(${level.id}, this.value)">
+                                <option value="">-- 請選擇 --</option>
+                                ${options}
+                            </select>
+                            ${hasChildren ? renderLevelTree(level.children, levelNumber, level) : ''}
+                            <div class="btn-add-sublevel-container">
+                                <button class="btn-add-sublevel" onclick="addHierarchyLevel(${level.id}); event.stopPropagation();" title="添加子層級">
+                                    ➕
+                                </button>
+                                <span class="sublevel-label">${displayLabel}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 獲取層級選項
+        function getHierarchyOptionsForLevel(level, isTopLevel = true, parentLevel = null) {
+            // 頂層可以選擇地點或容器，子層級只能選擇容器
+            let rootOptions = '';
+
+            if (isTopLevel) {
+                rootOptions = storageData.roots.map(root =>
+                    `<option value="root-${root.id}" ${level.selectedId === `root-${root.id}` ? 'selected' : ''}>
+                        🏠 ${root.name}
+                    </option>`
+                ).join('');
+            }
+
+            const getRootIdForNode = (nodeId) => {
+                const visited = new Set();
+                let currentNode = storageData.nodes.find(n => n.id === nodeId);
+
+                while (currentNode) {
+                    if (currentNode.parentType === 'root') {
+                        return currentNode.parentId;
+                    }
+                    if (currentNode.parentType === 'node') {
+                        if (visited.has(currentNode.parentId)) break;
+                        visited.add(currentNode.parentId);
+                        currentNode = storageData.nodes.find(n => n.id === currentNode.parentId);
+                    } else {
+                        break;
+                    }
+                }
+                return null;
+            };
+
+            // 獲取當前父級對應的地點 ID（若父級為地點或可溯源至地點的容器）
+            let parentRootId = null;
+            if (parentLevel && parentLevel.selectedId) {
+                const [parentType, parentRefId] = parentLevel.selectedId.split('-');
+                if (parentType === 'root') {
+                    parentRootId = parentRefId;
+                } else if (parentType === 'node') {
+                    parentRootId = getRootIdForNode(parentRefId);
+                }
+            }
+
+            let nodeOptions = '';
+
+            if (isTopLevel) {
+                // 第一層不受限制，可選擇所有容器
+                nodeOptions = storageData.nodes.map(node =>
+                    `<option value="node-${node.id}" ${level.selectedId === `node-${node.id}` ? 'selected' : ''}>
+                        📦 ${node.name}
+                    </option>`
+                ).join('');
+            } else {
+                // 其餘層級需遵守容器的限制地點設定
+                const filteredNodes = storageData.nodes.filter(node => {
+                    if (parentRootId) {
+                        return !node.restrictedRootId || node.restrictedRootId === parentRootId;
+                    }
+                    // 若無法判斷父級所屬地點，僅顯示無限制地點的容器
+                    return !node.restrictedRootId;
+                });
+
+                nodeOptions = filteredNodes.map(node =>
+                    `<option value="node-${node.id}" ${level.selectedId === `node-${node.id}` ? 'selected' : ''}>
+                        📦 ${node.name}
+                    </option>`
+                ).join('');
+            }
+
+            return rootOptions + nodeOptions;
+        }
+
+        // 清除子層級的選擇
+        function clearChildrenSelections(level) {
+            if (level.children) {
+                level.children.forEach(child => {
+                    child.selectedId = null;
+                    clearChildrenSelections(child);
+                });
+            }
+        }
+
+        // 重置層級構建器
+        function resetHierarchy() {
+            if (confirm('確定要重置層級構建器嗎？')) {
+                initializeHierarchy();
+            }
+        }
+
+        // 保存層級結構（待實現）
+        function saveHierarchy() {
+            if (hierarchyLevels.length === 0 || !hierarchyLevels[0].selectedId) {
+                alert('請至少選擇一個地點！');
+                return;
+            }
+
+            // 構建層級路徑
+            const path = hierarchyLevels
+                .filter(l => l.selectedId)
+                .map((l, idx) => {
+                    const [type, id] = l.selectedId.split('-');
+                    let item;
+                    if (type === 'root') {
+                        item = storageData.roots.find(r => r.id === id);
+                        return `🏠 ${item?.name || '未知'}`;
+                    } else {
+                        item = storageData.nodes.find(n => n.id === id);
+                        return `📦 ${item?.name || '未知'}`;
+                    }
+                })
+                .join(' → ');
+
+            showNotification(`已構建層級：${path}`, 'success');
+            console.log('層級結構：', hierarchyLevels);
+
+            // TODO: 這裡可以添加實際的保存邏輯
         }
     </script>
 
