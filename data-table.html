@@ -126,12 +126,14 @@
                             </select>
                         </div>
 
-                        <div class="form-group" id="parentField" style="display: none;">
-                            <label for="parentId">父級 *</label>
-                            <select id="parentId" class="form-input">
-                                <option value="">請選擇...</option>
-                            </select>
-                            <div class="form-hint">Node 或 Leaf 需要選擇父級</div>
+                        <div class="form-group" id="parentField">
+                            <label for="parentInputField">父級 *</label>
+                            <div class="parent-input-wrapper">
+                                <input type="text" id="parentInputField" class="form-input" placeholder="選擇或輸入新的父級..." oninput="handleParentInputChange()">
+                                <div class="parent-suggestions" id="parentSuggestions"></div>
+                            </div>
+                            <input type="hidden" id="parentId" value="">
+                            <div class="form-hint" id="parentHint">Node 或 Leaf 需要選擇父級</div>
                         </div>
 
                         <div class="form-group" id="filterLocationField" style="display: none;">
@@ -142,9 +144,19 @@
                             <div class="form-hint">選擇地點以篩選容器選項</div>
                         </div>
 
-                        <div class="form-group">
+                        <div class="form-group" id="nameField" style="display: none;">
                             <label for="itemName">名稱 *</label>
-                            <input type="text" id="itemName" class="form-input" placeholder="例如: 睡房、衣櫃、睡衣" required>
+                            <input type="text" id="itemName" class="form-input" placeholder="例如: 睡房、衣櫃、睡衣">
+                        </div>
+
+                        <div class="form-group" id="contentField" style="display: none;">
+                            <label>名稱 *</label>
+                            <div class="tags-input-wrapper" id="contentsWrapper">
+                                <div class="tags-container" id="contentsContainer" onclick="document.getElementById('contentInput').focus()">
+                                    <input type="text" id="contentInput" class="tag-input-field" placeholder="輸入名稱搜索或創建..." autocomplete="off">
+                                </div>
+                                <div class="tags-suggestions" id="contentSuggestions"></div>
+                            </div>
                         </div>
 
                         <div class="form-group" id="quantityField" style="display: none;">
@@ -168,6 +180,7 @@
                             <!-- 隱藏的原始輸入框，用於兼容舊代碼引用，雖然我們會修改邏輯不使用它，但保留ID以防萬一 -->
                             <input type="hidden" id="tags">
                         </div>
+
                         <input type="hidden" id="editId">
                         <input type="hidden" id="editType">
                     </form>
@@ -220,6 +233,7 @@
         let selectedLocationId = null;
         let expandedNodes = new Set();
         let selectedNodeId = null;
+        let isAddingToSpecificParent = false;
 
         // 搜索優化變量
         let searchTimeout;
@@ -243,6 +257,7 @@
             renderTempStorage();
             initializeHierarchy();
             initTagInput(); // 初始化標籤輸入系統
+            initContentInput(); // 初始化內容物輸入系統
 
             // 为临时存储区域添加拖放事件监听器
             const tempStorageContent = document.getElementById('tempStorageList');
@@ -250,6 +265,12 @@
                 tempStorageContent.addEventListener('dragover', handleDragOver);
                 tempStorageContent.addEventListener('drop', handleDropToTemp);
             }
+
+            // 初始化表單欄位狀態
+            updateFormFields();
+
+            // 初始化父級輸入系統
+            initParentInput();
         });
 
         // 載入數據
@@ -273,12 +294,12 @@
                     ],
                     nodes: [
                         // 睡房
-                        { id: '101', name: '衣櫃', parentType: 'root', parentId: '1', description: '白色大衣櫃', tags: [], timestamp: new Date().toISOString() },
-                        { id: '102', name: '床頭櫃', parentType: 'root', parentId: '1', description: '', tags: [], timestamp: new Date().toISOString() },
+                        { id: '101', name: '書桌頂櫃(中間)', parentType: 'root', parentId: '1', description: '', tags: [], timestamp: new Date().toISOString() },
+                        { id: '102', name: '書桌頂櫃(右)', parentType: 'root', parentId: '1', description: '', tags: [], timestamp: new Date().toISOString() },
+                        { id: '103', name: '書桌右空間', parentType: 'root', parentId: '1', description: '', tags: [], timestamp: new Date().toISOString() },
 
-                        // 衣櫃內部
-                        { id: '1011', name: '上層抽屜', parentType: 'node', parentId: '101', description: '', tags: [], timestamp: new Date().toISOString() },
-                        { id: '1012', name: '下層抽屜', parentType: 'node', parentId: '101', description: '', tags: [], timestamp: new Date().toISOString() },
+                        // 書桌右空間內部
+                        { id: '1031', name: '鐵盒', parentType: 'node', parentId: '103', description: '', tags: [], timestamp: new Date().toISOString() },
 
                         // 客廳
                         { id: '201', name: '電視櫃', parentType: 'root', parentId: '2', description: '', tags: [], timestamp: new Date().toISOString() },
@@ -298,9 +319,8 @@
                     ],
                     leafs: [
                         // 睡房物品
-                        { id: '1001', name: '冬季睡衣', parentType: 'node', parentId: '1011', description: '', tags: ['衣物'], timestamp: new Date().toISOString() },
-                        { id: '1002', name: '夏季T恤', parentType: 'node', parentId: '1012', description: '', tags: ['衣物'], timestamp: new Date().toISOString() },
-                        { id: '1003', name: '充電器', parentType: 'node', parentId: '102', description: '手機充電線', tags: ['電子'], timestamp: new Date().toISOString() },
+                        { id: '1001', name: 'Swtich', parentType: 'node', parentId: '102', description: '', tags: ['遊戲機'], timestamp: new Date().toISOString() },
+                        { id: '1002', name: '手機充電線', parentType: 'node', parentId: '1031', description: '', tags: [], timestamp: new Date().toISOString() },
 
                         // 客廳物品
                         { id: '2001', name: '遙控器', parentType: 'node', parentId: '201', description: '電視遙控', tags: [], timestamp: new Date().toISOString() },
@@ -322,15 +342,66 @@
                 };
                 saveToStorage();
             }
+            // 加載完成後更新標籤和項目名稱緩存
+            updateTagsCache();
+            updateNamesCache();
+        }
+
+        // 更新標籤緩存
+        function updateTagsCache() {
+            allTagsCache.clear();
+            const collect = (items) => {
+                items.forEach(item => {
+                    if (item.tags && Array.isArray(item.tags)) {
+                        item.tags.forEach(t => allTagsCache.add(t));
+                    }
+                });
+            };
+            collect(storageData.roots);
+            collect(storageData.nodes);
+            collect(storageData.leafs);
+            collect(storageData.tempStorage);
+        }
+
+        // 更新項目名稱緩存
+        function updateNamesCache() {
+            allNamesCache = [];
+            storageData.nodes.forEach(node => {
+                allNamesCache.push({
+                    id: node.id,
+                    name: node.name,
+                    type: 'node',
+                    path: getItemPath('node', node.id)
+                });
+            });
+            storageData.leafs.forEach(leaf => {
+                allNamesCache.push({
+                    id: leaf.id,
+                    name: leaf.name,
+                    type: 'leaf',
+                    path: getItemPath(leaf.parentType, leaf.parentId)
+                });
+            });
         }
 
         // 保存到 LocalStorage
         function saveToStorage() {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(storageData));
+            // 保存後更新標籤和項目名稱緩存
+            updateTagsCache();
+            updateNamesCache();
         }
 
         // --- 標籤管理系統 ---
         let currentTags = [];
+        let allTagsCache = new Set();  // 標籤集合緩存，避免每次查詢都遍歷所有項目
+
+        // --- 項目名稱管理系統 ---
+        let allNamesCache = [];  // 項目名稱緩存，存儲所有節點和葉子的信息
+
+        // --- 父級管理系統 ---
+        let currentParentValue = ''; // 儲存選擇或創建的父級值
+        let newCreatedParents = {}; // 儲存新創建的父級臨時信息
 
         function initTagInput() {
             const tagInput = document.getElementById('tagInput');
@@ -380,19 +451,8 @@
         }
 
         function getAllExistingTags() {
-            const tags = new Set();
-            const collect = (items) => {
-                items.forEach(item => {
-                    if (item.tags && Array.isArray(item.tags)) {
-                        item.tags.forEach(t => tags.add(t));
-                    }
-                });
-            };
-            collect(storageData.roots);
-            collect(storageData.nodes);
-            collect(storageData.leafs);
-            collect(storageData.tempStorage);
-            return Array.from(tags).sort();
+            // 直接使用緩存，避免每次都遍歷所有項目
+            return Array.from(allTagsCache).sort();
         }
 
         function showTagSuggestions(filterText = '') {
@@ -445,6 +505,7 @@
             tag = tag.trim();
             if (tag && !currentTags.includes(tag)) {
                 currentTags.push(tag);
+                allTagsCache.add(tag);  // 新標籤添加到緩存
                 renderTags();
             }
         }
@@ -475,6 +536,130 @@
 
             // 更新隱藏的 input 值 (為了兼容性)
             document.getElementById('tags').value = currentTags.join(', ');
+        }
+
+        // --- 內容物管理系統 (單選名稱) ---
+        let currentContent = null; // 單個項目而非陣列
+
+        function initContentInput() {
+            const contentInput = document.getElementById('contentInput');
+            const contentSuggestions = document.getElementById('contentSuggestions');
+
+            if (!contentInput) return;
+
+            contentInput.addEventListener('input', (e) => {
+                const value = e.target.value.trim();
+                if (value) {
+                    showContentSuggestions(value);
+                } else {
+                    contentSuggestions.classList.remove('show');
+                }
+            });
+
+            contentInput.addEventListener('focus', () => {
+                const value = contentInput.value.trim();
+                showContentSuggestions(value);
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('#contentsWrapper')) {
+                    contentSuggestions.classList.remove('show');
+                }
+            });
+        }
+
+        function showContentSuggestions(filterText = '') {
+            const contentSuggestions = document.getElementById('contentSuggestions');
+            const filterLower = filterText.toLowerCase();
+            const currentId = document.getElementById('editId').value; // 當前正在編輯的容器ID
+
+            // 直接使用緩存，避免每次都遍歷所有項目
+            let candidates = allNamesCache.filter(item => {
+                if (item.id === currentId) return false; // 排除自身
+                if (currentId && isAncestorOf(item.id, currentId)) return false; // 防止循環參考
+                return true;
+            });
+
+            // 過濾
+            const filtered = candidates.filter(item =>
+                (item.name.toLowerCase().includes(filterLower) || item.path.toLowerCase().includes(filterLower)) &&
+                (!currentContent || currentContent.id !== item.id)
+            );
+
+            let html = '';
+
+            // 創建新項目選項
+            if (filterText) {
+                html += `
+                    <div class="suggestion-item create-new" onclick="createNewContent('${filterText.replace(/'/g, "\\'")}', 'node')" style="background: #ecfdf5; color: #047857;">
+                        ✨ 創建新容器：<strong>"${filterText}"</strong>
+                    </div>
+                    <div class="suggestion-item create-new" onclick="createNewContent('${filterText.replace(/'/g, "\\'")}', 'leaf')" style="background: #fffbeb; color: #b45309;">
+                        ✨ 創建新物件：<strong>"${filterText}"</strong>
+                    </div>
+                `;
+            }
+
+            // 顯示現有項目
+            filtered.forEach(item => {
+                const icon = item.type === 'node' ? '📦' : '🔖';
+                html += `
+                    <div class="suggestion-item" onclick="addContent('${item.id}', '${item.name.replace(/'/g, "\\'")}', '${item.type}')">
+                        <div style="display: flex; flex-direction: column;">
+                            <span>${icon} ${item.name}</span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            if (html) {
+                contentSuggestions.innerHTML = html;
+                contentSuggestions.classList.add('show');
+            } else {
+                contentSuggestions.classList.remove('show');
+            }
+        }
+
+        function addContent(id, name, type, isNew = false) {
+            currentContent = { id, name, type, isNew };
+            renderContents();
+            document.getElementById('contentInput').value = '';
+            document.getElementById('contentSuggestions').classList.remove('show');
+        }
+
+        function createNewContent(name, type) {
+            const id = `new-${type}-${Date.now()}`;
+            addContent(id, name, type, true);
+        }
+
+        function removeContent(id) {
+            if (currentContent && currentContent.id === id) {
+                currentContent = null;
+            }
+            renderContents();
+        }
+
+        function renderContents() {
+            const container = document.getElementById('contentsContainer');
+            const input = document.getElementById('contentInput');
+
+            // 移除現有的 chips
+            const chips = container.querySelectorAll('.tag-chip');
+            chips.forEach(chip => chip.remove());
+
+            // 插入新的 chip (只有一個)
+            if (currentContent) {
+                const chip = document.createElement('div');
+                chip.className = 'tag-chip';
+                const icon = currentContent.type === 'node' ? '📦' : '🔖';
+                const newBadge = currentContent.isNew ? '<span style="font-size:0.8em; color:green;">(新)</span>' : '';
+
+                chip.innerHTML = `
+                    ${icon} ${currentContent.name} ${newBadge}
+                    <span class="tag-remove" onclick="removeContent('${currentContent.id}')">×</span>
+                `;
+                container.insertBefore(chip, input);
+            }
         }
 
         // 更新統計
@@ -517,10 +702,13 @@
 
             // 容器優先，然後按時間戳排序
             items.sort((a, b) => {
-                // 如果有選中的節點，將其置頂
+                // 如果有選中的節點或其祖先，將其置頂
                 if (selectedNodeId) {
-                    if (a.type === 'node' && a.data.id === selectedNodeId) return -1;
-                    if (b.type === 'node' && b.data.id === selectedNodeId) return 1;
+                    const isASelectedOrAncestor = a.type === 'node' && (a.data.id === selectedNodeId || isAncestorOf(a.data.id, selectedNodeId));
+                    const isBSelectedOrAncestor = b.type === 'node' && (b.data.id === selectedNodeId || isAncestorOf(b.data.id, selectedNodeId));
+
+                    if (isASelectedOrAncestor && !isBSelectedOrAncestor) return -1;
+                    if (!isASelectedOrAncestor && isBSelectedOrAncestor) return 1;
                 }
 
                 if (a.type !== b.type) {
@@ -575,9 +763,9 @@
             let selectedRoot = null;
             let selectedIndex = -1;
 
-            // 如果有選中的地點，將其移到第一位 (僅在非搜索模式下)
+            // 如果有選中的地點，將其移到第一位
             let sortedRoots = [...roots];
-            if (selectedLocationId && !searchText) {
+            if (selectedLocationId) {
                 const selectedRootIndex = sortedRoots.findIndex(r => r.id === selectedLocationId);
                 if (selectedRootIndex > -1) {
                     const selectedRootItem = sortedRoots.splice(selectedRootIndex, 1)[0];
@@ -622,7 +810,7 @@
                              ondragover="handleDragOver(event)"
                              ondrop="handleDrop(event, 'root', '${root.id}')">
                             <div class="detail-header-inline">
-                                <h4>🏠 ${root.name} (${displayNodes.length + displayLeafs.length})</h4>
+                                <h4>🏠 ${root.name}</h4>
                                 <div class="detail-actions-inline">
                                     <button class="btn-action-small" onclick="editItem('root', '${root.id}'); event.stopPropagation(); return false;">✏️ 編輯</button>
                                     <button class="btn-action-small danger" onclick="deleteItem('root', '${root.id}'); event.stopPropagation(); return false;">🗑️ 刪除</button>
@@ -821,9 +1009,9 @@
                          ${isExpanded ? `ondragstart="handleNodeDragStart(event, '${node.id}', ${isExpanded})"` : ''}>
                         <div class="node-header-content"
                              style="display: flex; flex-direction: column; align-items: center; width: 100%; cursor: pointer;"
-                             onclick="selectNode('${node.id}', '${parentId || 'root'}'); event.stopPropagation();">
+                             onclick="handleHeaderClick(event, '${node.id}', '${parentId || 'root'}')">
                             ${hasChildren ? `
-                                <button class="node-toggle" onclick="toggleNode('${node.id}'); event.stopPropagation();">
+                                <button class="node-toggle" onclick="handleToggleClick(event, '${node.id}', '${parentId || 'root'}')">
                                     ${isExpanded ? '▼' : '▶'}
                                 </button>
                             ` : '<span class="node-spacer"></span>'}
@@ -871,9 +1059,21 @@
             return html;
         }
 
+        // 處理點擊事件，防止冒泡
+        function handleToggleClick(event, nodeId, parentId) {
+            event.stopPropagation();
+            selectNode(nodeId, parentId);
+        }
+
+        function handleHeaderClick(event, nodeId, parentId) {
+            event.stopPropagation();
+            selectNode(nodeId, parentId);
+        }
+
         // 選擇節點
         function selectNode(nodeId, parentId) {
             const searchText = document.getElementById('searchInput').value;
+
             // 如果點擊同一個節點, 取消選中並收起
             if (selectedNodeId === nodeId) {
                 selectedNodeId = null;
@@ -881,10 +1081,31 @@
                     expandedNodes.delete(nodeId);
                 }
                 renderLocations(searchText);
+                renderTempStorage();
                 return;
             }
 
             selectedNodeId = nodeId;
+
+            // 自動找到並選中該節點所屬的地點 (Root)
+            let currentNode = storageData.nodes.find(n => n.id === nodeId) ||
+                             (storageData.tempStorage ? storageData.tempStorage.find(n => n.id === nodeId) : null);
+
+            if (currentNode) {
+                // 如果是直接在 Root 下的 Node
+                if (currentNode.parentType === 'root') {
+                    selectedLocationId = currentNode.parentId;
+                } else {
+                    // 如果是深層嵌套的 Node，向上查找直到找到 Root
+                    let tempNode = currentNode;
+                    while (tempNode && tempNode.parentType === 'node') {
+                        tempNode = storageData.nodes.find(n => n.id === tempNode.parentId);
+                    }
+                    if (tempNode && tempNode.parentType === 'root') {
+                        selectedLocationId = tempNode.parentId;
+                    }
+                }
+            }
 
             // 收起所有其他節點，保留當前節點及其祖先鏈
             const ancestorIds = getAncestorIds(nodeId);
@@ -905,12 +1126,14 @@
             }
 
             renderLocations(searchText);
+            renderTempStorage();
         }
 
         // 獲取節點的所有祖先ID (防止無限循環)
         function getAncestorIds(nodeId) {
             const ancestors = [];
-            let currentNode = storageData.nodes.find(n => n.id === nodeId);
+            let currentNode = storageData.nodes.find(n => n.id === nodeId) ||
+                             (storageData.tempStorage ? storageData.tempStorage.find(n => n.id === nodeId) : null);
             const visited = new Set(); // 防止數據已損壞時的無限循環
 
             while (currentNode && currentNode.parentType === 'node') {
@@ -918,7 +1141,8 @@
                 visited.add(currentNode.id);
 
                 ancestors.push(currentNode.parentId);
-                currentNode = storageData.nodes.find(n => n.id === currentNode.parentId);
+                currentNode = storageData.nodes.find(n => n.id === currentNode.parentId) ||
+                             (storageData.tempStorage ? storageData.tempStorage.find(n => n.id === currentNode.parentId) : null);
             }
 
             return ancestors;
@@ -947,27 +1171,93 @@
             resetForm();
             document.getElementById('itemType').value = 'root';
             updateFormFields();
-            document.getElementById('itemName').focus();
+            document.getElementById('contentInput').focus();
         }
 
         // 添加項目到地點
         function addItemToLocation(rootId) {
             resetForm();
+            isAddingToSpecificParent = true;
             document.getElementById('itemType').value = 'node';
+
+            // 1. 先更新表單以填充地點篩選選項
             updateFormFields();
-            document.getElementById('parentId').value = `root-${rootId}`;
-            document.getElementById('itemName').focus();
+
+            // 2. 設置地點篩選
+            const filterSelect = document.getElementById('filterLocationId');
+            if (filterSelect) {
+                filterSelect.value = `root-${rootId}`;
+            }
+
+            // 3. 再次更新表單以根據篩選填充父級選項
+            updateFormFields();
+
+            // 4. 設置父級
+            const root = storageData.roots.find(r => r.id === rootId);
+            if (root) {
+                document.getElementById('parentId').value = `root-${rootId}`;
+                document.getElementById('parentInputField').value = `🏠 ${root.name}`;
+            }
+
+            // 5. 更新UI
+            updateFormFields();
+
+            document.getElementById('contentInput').focus();
             switchTab('form');
         }
 
         // 添加項目到節點
         function addItemToNode(nodeId) {
             resetForm();
+            isAddingToSpecificParent = true;
             document.getElementById('itemType').value = 'node';
+
+            // 1. 先更新表單以填充地點篩選選項
             updateFormFields();
+
+            // 找到該節點所屬的地點以設置篩選
+            let rootId = null;
+            const node = storageData.nodes.find(n => n.id === nodeId);
+            if (node) {
+                if (node.parentType === 'root') {
+                    rootId = node.parentId;
+                } else {
+                    let tempNode = node;
+                    while (tempNode && tempNode.parentType === 'node') {
+                        tempNode = storageData.nodes.find(n => n.id === tempNode.parentId);
+                    }
+                    if (tempNode && tempNode.parentType === 'root') {
+                        rootId = tempNode.parentId;
+                    }
+                }
+            }
+
+            // 2. 設置地點篩選
+            const filterSelect = document.getElementById('filterLocationId');
+            if (filterSelect && rootId) {
+                filterSelect.value = `root-${rootId}`;
+            }
+
+            // 3. 再次更新表單以根據篩選填充父級選項
+            updateFormFields();
+
+            // 4. 設置父級
             document.getElementById('parentId').value = `node-${nodeId}`;
-            document.getElementById('itemName').focus();
+            const parentPath = getItemPath('node', nodeId);
+            document.getElementById('parentInputField').value = parentPath;
+
+            // 5. 更新UI
+            updateFormFields();
+
+            document.getElementById('contentInput').focus();
             switchTab('form');
+        }
+
+        // 清除父級選擇
+        function clearParentSelection() {
+            document.getElementById('parentId').value = "";
+            isAddingToSpecificParent = false;
+            updateFormFields();
         }
 
         // 更新表單欄位
@@ -975,15 +1265,18 @@
             const itemType = document.getElementById('itemType').value;
             const editType = document.getElementById('editType').value;
             const parentField = document.getElementById('parentField');
-            const parentSelect = document.getElementById('parentId');
             const quantityField = document.getElementById('quantityField');
             const filterLocationField = document.getElementById('filterLocationField');
+            const parentHint = document.getElementById('parentHint');
+            const contentField = document.getElementById('contentField');
 
             // 如果是临时存储项目，不需要父级选择
             if (editType === 'temp') {
                 parentField.style.display = 'none';
-                parentSelect.required = false;
                 filterLocationField.style.display = 'none';
+                if (contentField) contentField.style.display = 'block';
+                const nameField = document.getElementById('nameField');
+                if (nameField) nameField.style.display = 'none';
 
                 // 臨時存儲如果是 leaf 類型也顯示數量
                 if (itemType === 'leaf') {
@@ -996,23 +1289,27 @@
 
             if (itemType === 'root') {
                 parentField.style.display = 'none';
-                parentSelect.required = false;
                 quantityField.style.display = 'none';
                 filterLocationField.style.display = 'none';
-            } else if (itemType === 'node') {
+                if (contentField) contentField.style.display = 'none';
+                const nameField = document.getElementById('nameField');
+                if (nameField) nameField.style.display = 'block';
+            } else {
+                // 預設顯示父級 (當類型為空、node 或 leaf 時)
                 parentField.style.display = 'block';
-                parentSelect.required = true;
-                quantityField.style.display = 'none';
-                filterLocationField.style.display = 'block';
-                populateFilterLocations();
-                populateParentOptions(itemType);
-            } else if (itemType === 'leaf') {
-                parentField.style.display = 'block';
-                parentSelect.required = true;
-                quantityField.style.display = 'block';
-                filterLocationField.style.display = 'none';
-                populateParentOptions(itemType);
+                quantityField.style.display = itemType === 'leaf' ? 'block' : 'none';
+                filterLocationField.style.display = itemType === 'node' ? 'block' : 'none';
+                if (contentField) contentField.style.display = 'block';
+                const nameField = document.getElementById('nameField');
+                if (nameField) nameField.style.display = 'none';
+
+                if (itemType === 'node') populateFilterLocations();
+
+                // 重新顯示父級建議
+                // showParentSuggestions('');
+                if (parentHint) parentHint.style.display = 'block';
             }
+
         }
 
         // 填充地點篩選選項
@@ -1031,66 +1328,201 @@
             }
         }
 
-        // 填充父級選項
-        function populateParentOptions(childType) {
-            const parentSelect = document.getElementById('parentId');
-            const currentValue = parentSelect.value;
-            const filterLocationId = document.getElementById('filterLocationId')?.value || '';
-            parentSelect.innerHTML = '<option value="">請選擇...</option>';
+        // 初始化父級輸入
+        function initParentInput() {
+            const parentInput = document.getElementById('parentInputField');
+            const parentSuggestions = document.getElementById('parentSuggestions');
 
-            if (childType === 'node') {
+            if (!parentInput) return;
+
+            // 輸入事件：顯示建議
+            parentInput.addEventListener('input', (e) => {
+                const value = e.target.value.trim();
+                if (value) {
+                    showParentSuggestions(value);
+                } else {
+                    parentSuggestions.classList.remove('show');
+                }
+            });
+
+            // 聚焦顯示建議
+            parentInput.addEventListener('focus', () => {
+                const value = parentInput.value.trim();
+                showParentSuggestions(value || '');
+            });
+
+            // 點擊外部關閉建議
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.parent-input-wrapper')) {
+                    parentSuggestions.classList.remove('show');
+                }
+            });
+        }
+
+        // 顯示父級建議
+        function showParentSuggestions(filterText = '') {
+            const parentSuggestions = document.getElementById('parentSuggestions');
+            const itemType = document.getElementById('itemType').value;
+            const filterLocationId = document.getElementById('filterLocationId')?.value || '';
+
+            let availableParents = [];
+            const filterTextLower = filterText.toLowerCase();
+
+            // 根據類型獲取可用的父級
+            if (itemType === 'node') {
                 // Node 可以在 Root 或其他 Node 下
-                // 如果選擇了地點篩選，只顯示該地點和其容器
                 if (filterLocationId) {
                     const [filterType, filterId] = filterLocationId.split('-');
                     if (filterType === 'root') {
                         const root = storageData.roots.find(r => r.id === filterId);
                         if (root) {
-                            parentSelect.innerHTML += `<option value="root-${root.id}">🏠 ${root.name}</option>`;
+                            availableParents.push({ id: `root-${root.id}`, name: `🏠 ${root.name}`, type: 'root' });
                         }
-                        // 只顯示該地點下的容器
                         storageData.nodes.forEach(node => {
+                            let isUnderRoot = false;
                             if (node.parentType === 'root' && node.parentId === filterId) {
+                                isUnderRoot = true;
+                            } else {
+                                let tempNode = node;
+                                while (tempNode && tempNode.parentType === 'node') {
+                                    tempNode = storageData.nodes.find(n => n.id === tempNode.parentId);
+                                }
+                                if (tempNode && tempNode.parentType === 'root' && tempNode.parentId === filterId) {
+                                    isUnderRoot = true;
+                                }
+                            }
+                            if (isUnderRoot) {
                                 const path = getItemPath('node', node.id);
-                                parentSelect.innerHTML += `<option value="node-${node.id}">📦 ${path}</option>`;
+                                availableParents.push({ id: `node-${node.id}`, name: `📦 ${path}`, type: 'node' });
                             }
                         });
                     }
                 } else {
-                    // 顯示所有地點和容器
                     storageData.roots.forEach(root => {
-                        parentSelect.innerHTML += `<option value="root-${root.id}">🏠 ${root.name}</option>`;
+                        availableParents.push({ id: `root-${root.id}`, name: `🏠 ${root.name}`, type: 'root' });
                     });
                     storageData.nodes.forEach(node => {
                         const path = getItemPath('node', node.id);
-                        parentSelect.innerHTML += `<option value="node-${node.id}">📦 ${path}</option>`;
+                        availableParents.push({ id: `node-${node.id}`, name: `📦 ${path}`, type: 'node' });
                     });
                 }
-
-                // 如果沒有當前選擇值，默認選擇"未分類"作為父級
-                if (!currentValue) {
-                    const unclassifiedRoot = storageData.roots.find(r => r.name === '未分類');
-                    if (unclassifiedRoot) {
-                        parentSelect.value = `root-${unclassifiedRoot.id}`;
-                    }
-                } else {
-                    parentSelect.value = currentValue;
-                }
-            } else if (childType === 'leaf') {
+            } else if (itemType === 'leaf') {
                 // Leaf 可以在 Root 或 Node 下
                 storageData.roots.forEach(root => {
-                    parentSelect.innerHTML += `<option value="root-${root.id}">🏠 ${root.name}</option>`;
+                    availableParents.push({ id: `root-${root.id}`, name: `🏠 ${root.name}`, type: 'root' });
                 });
                 storageData.nodes.forEach(node => {
                     const path = getItemPath('node', node.id);
-                    parentSelect.innerHTML += `<option value="node-${node.id}">📦 ${path}</option>`;
+                    availableParents.push({ id: `node-${node.id}`, name: `📦 ${path}`, type: 'node' });
                 });
-
-                // 恢復之前的選擇
-                if (currentValue) {
-                    parentSelect.value = currentValue;
-                }
             }
+
+            // 過濾建議
+            const filteredParents = availableParents.filter(p =>
+                p.name.toLowerCase().includes(filterTextLower)
+            );
+
+            let html = '';
+
+            // 如果輸入了文字，且該文字不在現有父級中，顯示"創建新父級"選項
+            if (filterText && !availableParents.some(p => p.name.toLowerCase().includes(filterTextLower))) {
+                const itemTypeLabel = itemType === 'node' ? '容器' : '物件';
+                html += `
+                    <div class="suggestion-item create-new" onclick="createNewParent('${filterText.replace(/'/g, "\\'")}', '${itemType}')" style="background: #ecfdf5; color: #047857; font-weight: 500;">
+                        ✨ 創建新${itemTypeLabel}：<strong>"${filterText}"</strong>
+                    </div>
+                `;
+            }
+
+            // 顯示現有父級建議
+            filteredParents.forEach(parent => {
+                html += `
+                    <div class="suggestion-item" onclick="selectParent('${parent.id}', '${parent.name.replace(/'/g, "\\'")}')" style="cursor: pointer;">
+                        ${parent.name}
+                    </div>
+                `;
+            });
+
+            if (html) {
+                parentSuggestions.innerHTML = html;
+                parentSuggestions.classList.add('show');
+            } else {
+                parentSuggestions.classList.remove('show');
+            }
+        }
+
+        // 選擇已存在的父級
+        function selectParent(parentId, parentName) {
+            document.getElementById('parentInputField').value = parentName;
+            document.getElementById('parentId').value = parentId;
+            currentParentValue = parentId;
+            document.getElementById('parentSuggestions').classList.remove('show');
+        }
+
+        // 創建新的父級
+        function createNewParent(parentName, itemType) {
+            const filterId = document.getElementById('filterLocationId')?.value || '';
+            let parentType, parentId;
+
+            if (itemType === 'node') {
+                // 新容器的父級
+                if (filterId) {
+                    const [filterType, fId] = filterId.split('-');
+                    parentType = filterType;
+                    parentId = fId;
+                } else {
+                    // 如果沒有選擇限制地點，默認在\"未分類\"下
+                    const unclassifiedRoot = storageData.roots.find(r => r.name === '未分類');
+                    if (unclassifiedRoot) {
+                        parentType = 'root';
+                        parentId = unclassifiedRoot.id;
+                    } else {
+                        alert('請先選擇限制地點或創建地點');
+                        return;
+                    }
+                }
+
+                // 創建新容器對象
+                const newNodeId = `new-node-${Date.now()}`;
+                const newNode = {
+                    id: newNodeId,
+                    name: parentName,
+                    parentType: parentType,
+                    parentId: parentId,
+                    description: '',
+                    tags: [],
+                    timestamp: new Date().toISOString(),
+                    isNewTemp: true // 標記為臨時新創建
+                };
+
+                // 暫存新創建的節點
+                newCreatedParents[newNodeId] = newNode;
+
+                // 更新輸入框和隱藏值
+                const displayName = `📦 ${parentName}`;
+                document.getElementById('parentInputField').value = displayName;
+                document.getElementById('parentId').value = newNodeId;
+                currentParentValue = newNodeId;
+                document.getElementById('parentSuggestions').classList.remove('show');
+            }
+        }
+
+        // 處理父級輸入改變
+        function handleParentInputChange() {
+            // 當輸入框改變時，重新顯示建議
+            const inputValue = document.getElementById('parentInputField').value.trim();
+            if (inputValue) {
+                showParentSuggestions(inputValue);
+            } else {
+                document.getElementById('parentId').value = '';
+                currentParentValue = '';
+                document.getElementById('parentSuggestions').classList.remove('show');
+            }
+        }
+
+        // 填充父級選項 (已棄用，改用輸入框系統)
+        function populateParentOptions(childType) {
+            return;
         }
 
         // 獲取項目路徑
@@ -1158,7 +1590,7 @@
             event.preventDefault();
 
             const itemType = document.getElementById('itemType').value;
-            const itemName = document.getElementById('itemName').value.trim();
+            const itemName = document.getElementById('itemName').value.trim(); // Root 使用
             const itemQuantity = document.getElementById('itemQuantity').value;
             const description = document.getElementById('description').value.trim();
             // 使用新的標籤系統
@@ -1166,18 +1598,30 @@
             const editId = document.getElementById('editId').value;
             const editType = document.getElementById('editType').value;
 
-            if (!itemName) {
-                alert('請輸入名稱');
-                return;
+            // Root 類型使用 itemName，Node/Leaf 使用 currentContent
+            if (itemType === 'root') {
+                if (!itemName) {
+                    alert('請輸入地點名稱！');
+                    return;
+                }
+            } else {
+                if (!currentContent) {
+                    alert('請選擇或輸入名稱！');
+                    return;
+                }
             }
 
             const data = {
-                id: editId || Date.now().toString(),
-                name: itemName,
-                description: description,
-                tags: tags,
-                timestamp: new Date().toISOString()
-            };
+                id: itemType === 'root' ? (Date.now().toString() + Math.random().toString(36).substr(2, 5)) : (currentContent.isNew ? (Date.now().toString() + Math.random().toString(36).substr(2, 5)) : currentContent.id),
+                name: itemType === 'root' ? itemName : currentContent.name,
+                    description: description,
+                    tags: tags,
+                    timestamp: new Date().toISOString()
+                };
+
+            if (editId) {
+                data.id = editId;
+            }
 
             if (itemType === 'leaf') {
                 data.quantity = itemQuantity ? parseInt(itemQuantity) : 1;
@@ -1198,59 +1642,101 @@
                     if (index !== -1) {
                         storageData.tempStorage[index] = data;
                     }
-                    showNotification('更新成功！', 'success');
                 } else {
                     // 新增临时项目
-                    storageData.tempStorage.push(data);
-                    showNotification('已添加到臨時存儲！', 'success');
+                    if (currentContent.isNew) {
+                        storageData.tempStorage.push(data);
+                    } else {
+                        // 現有項目複製到臨時存儲
+                        data.id = Date.now().toString() + Math.random().toString(36).substr(2, 5);
+                        storageData.tempStorage.push(data);
+                    }
                 }
-
-                saveToStorage();
-                resetForm();
-                renderTempStorage();
-                return;
-            }
-
-            // 處理父級關係
-            if (itemType === 'node' || itemType === 'leaf') {
-                const parentValue = document.getElementById('parentId').value;
-                if (!parentValue) {
-                    alert(`${itemType === 'node' ? '容器' : '物件'}必須選擇父級！`);
-                    return;
-                }
-                const [parentType, parentId] = parentValue.split('-');
-                data.parentType = parentType;
-                data.parentId = parentId;
-            }
-
-            // 處理容器的限制地點
-            if (itemType === 'node') {
-                const filterLocationId = document.getElementById('filterLocationId')?.value || '';
-                if (filterLocationId) {
-                    // 如果選擇了限制地點，將其保存到容器
-                    const [, rootId] = filterLocationId.split('-');
-                    data.restrictedRootId = rootId;
-                } else {
-                    // 如果沒有選擇限制地點，清除該字段
-                    delete data.restrictedRootId;
-                }
-            }
-
-            // 編輯或新增
-            if (editId && editType) {
-                updateItem(editType, data);
-                showNotification('更新成功！', 'success');
             } else {
+                // 處理 Root 類型直接保存
                 if (itemType === 'root') {
-                    storageData.roots.push(data);
-                } else if (itemType === 'node') {
-                    storageData.nodes.push(data);
-                } else if (itemType === 'leaf') {
-                    storageData.leafs.push(data);
+                    if (editId && editType) {
+                        updateItem(editType, data);
+                    } else {
+                        storageData.roots.push(data);
+                    }
+                } else {
+                    // 處理父級關係 (Node/Leaf)
+                    if (itemType === 'node' || itemType === 'leaf') {
+                        const parentValue = document.getElementById('parentId').value;
+                        if (!parentValue) {
+                            alert(`${itemType === 'node' ? '容器' : '物件'}必須選擇父級！`);
+                            return;
+                        }
+
+                    // 如果父級是新創建的臨時節點，先保存到 storageData
+                    if (newCreatedParents[parentValue]) {
+                        const newParent = newCreatedParents[parentValue];
+                        const realId = Date.now().toString() + '-node'; // 生成真實 ID
+                        newParent.id = realId;
+                        delete newParent.isNewTemp;
+                        storageData.nodes.push(newParent);
+                        delete newCreatedParents[parentValue];
+                        // 更新子項目的父級 ID 為真實 ID
+                        document.getElementById('parentId').value = `node-${realId}`;
+                        const updatedParentValue = document.getElementById('parentId').value;
+                        const [parentType, parentId] = updatedParentValue.split('-');
+                        data.parentType = parentType;
+                        data.parentId = parentId;
+                    } else {
+                        const [parentType, parentId] = parentValue.split('-');
+                        data.parentType = parentType;
+                        data.parentId = parentId;
+                    }
                 }
-                showNotification('新增成功！', 'success');
+
+                // 處理容器的限制地點
+                if (itemType === 'node') {
+                    const filterLocationId = document.getElementById('filterLocationId')?.value || '';
+                    if (filterLocationId) {
+                        // 如果選擇了限制地點，將其保存到容器
+                        const [, rootId] = filterLocationId.split('-');
+                        data.restrictedRootId = rootId;
+                    } else {
+                        // 如果沒有選擇限制地點，清除該字段
+                        delete data.restrictedRootId;
+                    }
+                }
+
+                // 編輯或新增
+                if (editId && editType) {
+                    updateItem(editType, data);
+                } else {
+                    // 如果是現有項目，則是移動操作
+                    if (!currentContent.isNew) {
+                        // 找到原項目並更新父級
+                        let originalItem;
+                        if (currentContent.type === 'root') originalItem = storageData.roots.find(r => r.id === currentContent.id);
+                        else if (currentContent.type === 'node') originalItem = storageData.nodes.find(n => n.id === currentContent.id);
+                        else if (currentContent.type === 'leaf') originalItem = storageData.leafs.find(l => l.id === currentContent.id);
+
+                        if (originalItem) {
+                            originalItem.parentType = data.parentType;
+                            originalItem.parentId = data.parentId;
+                            // 更新其他屬性
+                            originalItem.description = data.description;
+                            originalItem.tags = data.tags;
+                            if (itemType === 'leaf') originalItem.quantity = data.quantity;
+                            if (itemType === 'node') originalItem.restrictedRootId = data.restrictedRootId;
+                        }
+                    } else {
+                        // 創建新項目
+                        if (itemType === 'node') {
+                            storageData.nodes.push(data);
+                        } else if (itemType === 'leaf') {
+                            storageData.leafs.push(data);
+                        }
+                    }
+                    }
+                }
             }
 
+            showNotification(editId ? '更新成功！' : '新增成功！', 'success');
             saveToStorage();
             resetForm();
             updateStats();
@@ -1290,19 +1776,30 @@
             if (item) {
                 // 自動切換到"添加項目"分頁
                 switchTab('form');
+                isAddingToSpecificParent = false;
 
                 document.getElementById('itemType').value = type;
                 updateFormFields();
 
                 document.getElementById('editId').value = item.id;
                 document.getElementById('editType').value = type;
-                document.getElementById('itemName').value = item.name;
+                // document.getElementById('itemName').value = item.name; // 已棄用
                 document.getElementById('description').value = item.description || '';
 
                 // 更新標籤系統
                 currentTags = item.tags ? [...item.tags] : [];
                 renderTags();
                 // document.getElementById('tags').value = item.tags ? item.tags.join(', ') : ''; // 已由 renderTags 處理
+
+                // 填充名稱
+                if (type === 'root') {
+                    // Root 類型使用 itemName
+                    document.getElementById('itemName').value = item.name;
+                } else {
+                    // Node/Leaf 使用內容物系統
+                    currentContent = { id: item.id, name: item.name, type: type, isNew: false };
+                    renderContents();
+                }
 
                 if (type === 'leaf') {
                     document.getElementById('itemQuantity').value = item.quantity || 1;
@@ -1317,11 +1814,25 @@
                 }
 
                 if (item.parentType && item.parentId) {
-                    document.getElementById('parentId').value = `${item.parentType}-${item.parentId}`;
+                    const parentValue = `${item.parentType}-${item.parentId}`;
+                    document.getElementById('parentId').value = parentValue;
+
+                    // 更新父級輸入框顯示
+                    let parentDisplayName = '';
+                    if (item.parentType === 'root') {
+                        const root = storageData.roots.find(r => r.id === item.parentId);
+                        parentDisplayName = root ? `🏠 ${root.name}` : '未知地點';
+                    } else if (item.parentType === 'node') {
+                        parentDisplayName = getItemPath('node', item.parentId);
+                    }
+                    document.getElementById('parentInputField').value = parentDisplayName;
                 }
 
+                updateFormFields();
+
                 // 顯示編輯橫幅
-                document.getElementById('formTitle').textContent = '✏️ 編輯項目';
+                const formTab = document.getElementById('formTab');
+                if (formTab) formTab.textContent = '✏️ 編輯項目';
                 document.getElementById('editBannerText').textContent = `✏️ 正在編輯：${item.name}`;
                 document.getElementById('editBanner').style.display = 'flex';
 
@@ -1422,16 +1933,26 @@
             document.getElementById('dataForm').reset();
             document.getElementById('editId').value = '';
             document.getElementById('editType').value = '';
-            document.getElementById('parentField').style.display = 'none';
-            document.getElementById('parentId').required = false;
-            document.getElementById('formTitle').textContent = '➕ 添加項目';
+            document.getElementById('parentId').value = '';
+            document.getElementById('parentInputField').value = '';
+            const formTab = document.getElementById('formTab');
+            if (formTab) formTab.textContent = '➕ 添加項目';
             document.getElementById('editBanner').style.display = 'none';
             currentEditId = null;
             currentEditType = null;
+            isAddingToSpecificParent = false;
+            currentParentValue = '';
+            newCreatedParents = {};
 
             // 重置標籤
             currentTags = [];
             renderTags();
+
+            // 重置內容物
+            currentContent = null;
+            renderContents();
+
+            updateFormFields();
         }
 
         // 取消編輯
@@ -1614,7 +2135,8 @@
 
                 const icon = isNode ? '📦' : '🔖';
                 const typeLabel = isNode ? '容器' : '物件';
-                const shouldBeFullWidth = isExpanded && hasChildren;
+                const isSelected = selectedNodeId === item.id;
+                const shouldBeFullWidth = isSelected || (isExpanded && hasChildren);
                 const wrapperStyle = shouldBeFullWidth ? 'grid-column: 1 / -1; width: 100%;' : '';
                 const cardStyle = shouldBeFullWidth ? 'aspect-ratio: auto; flex-direction: row; justify-content: flex-start; padding: 10px 20px; gap: 15px; height: auto;' : '';
                 const infoStyle = shouldBeFullWidth ? 'align-items: flex-start; text-align: left;' : '';
@@ -1622,17 +2144,17 @@
 
                 return `
                     <div class="temp-item-wrapper" style="${wrapperStyle}">
-                        <div class="temp-item-card"
+                        <div class="temp-item-card ${isSelected ? 'selected-node' : ''}"
                              draggable="true"
                              onmouseenter="showHoverPopup(event, 'temp', '${item.id}')"
                              onmouseleave="hideHoverPopup()"
                              ondragstart="handleDragStart(event, 'temp', '${item.id}')"
                              ${isNode ? `ondrop="handleDrop(event, 'node', '${item.id}')"` : ''}
                              style="${cardStyle}"
-                             ${isNode && hasChildren ? `onclick="toggleNode('${item.id}'); event.stopPropagation();"` : ''}>
+                             ${isNode ? `onclick="handleHeaderClick(event, '${item.id}', 'temp')"` : ''}>
 
                             ${isNode && hasChildren ? `
-                                <button class="node-toggle" onclick="toggleNode('${item.id}'); event.stopPropagation();" style="position: absolute; top: 5px; left: 5px;">
+                                <button class="node-toggle" onclick="handleToggleClick(event, '${item.id}', 'temp')" style="position: absolute; top: 5px; left: 5px;">
                                     ${isExpanded ? '▼' : '▶'}
                                 </button>
                             ` : ''}
@@ -1671,20 +2193,15 @@
 
         // 添加临时项目
         function addTempItem() {
+            resetForm();
             document.getElementById('itemType').value = 'node';
-            updateFormFields();
-
-            // 设置一个特殊标记，表示要添加到临时存储
             document.getElementById('editId').value = '';
             document.getElementById('editType').value = 'temp';
 
-            // 隐藏父级选择并移除 required 属性
-            const parentField = document.getElementById('parentField');
-            const parentSelect = document.getElementById('parentId');
-            parentField.style.display = 'none';
-            parentSelect.removeAttribute('required');
+            updateFormFields();
 
-            document.getElementById('formTitle').textContent = '➕ 添加臨時項目';
+            const formTab = document.getElementById('formTab');
+            if (formTab) formTab.textContent = '➕ 添加臨時項目';
             document.querySelector('.form-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
@@ -1692,30 +2209,29 @@
         function editTempItem(id) {
             const item = storageData.tempStorage.find(i => i.id === id);
             if (item) {
+                switchTab('form');
                 document.getElementById('itemType').value = item.type;
-                updateFormFields();
-
                 document.getElementById('editId').value = item.id;
                 document.getElementById('editType').value = 'temp';
-                document.getElementById('itemName').value = item.name;
+
+                updateFormFields();
+
                 document.getElementById('description').value = item.description || '';
 
                 // 更新標籤系統
                 currentTags = item.tags ? [...item.tags] : [];
                 renderTags();
-                // document.getElementById('tags').value = item.tags ? item.tags.join(', ') : ''; // 已由 renderTags 處理
+
+                // 填充名稱
+                currentContent = { id: item.id, name: item.name, type: item.type, isNew: false };
+                renderContents();
 
                 if (item.type === 'leaf') {
                     document.getElementById('itemQuantity').value = item.quantity || 1;
                 }
 
-                // 隐藏父级选择并移除 required 属性
-                const parentField = document.getElementById('parentField');
-                const parentSelect = document.getElementById('parentId');
-                parentField.style.display = 'none';
-                parentSelect.removeAttribute('required');
-
-                document.getElementById('formTitle').textContent = '✏️ 編輯臨時項目';
+                const formTab = document.getElementById('formTab');
+                if (formTab) formTab.textContent = '✏️ 編輯臨時項目';
                 document.getElementById('editBannerText').textContent = `✏️ 正在編輯：${item.name}`;
                 document.getElementById('editBanner').style.display = 'flex';
 
