@@ -409,9 +409,13 @@
 
             if (!tagInput) return;
 
-            // 輸入事件：顯示建議
+            // 輸入事件：顯示建議並移除紅邊
             tagInput.addEventListener('input', (e) => {
                 const value = e.target.value.trim();
+                // 移除紅邊
+                tagInput.style.border = '';
+                tagInput.style.boxShadow = '';
+                // 顯示建議
                 if (value) {
                     showTagSuggestions(value);
                 } else {
@@ -427,6 +431,8 @@
                     if (value) {
                         addTag(value);
                         tagInput.value = '';
+                        tagInput.style.border = '';
+                        tagInput.style.boxShadow = '';
                         tagsSuggestions.classList.remove('show');
                     }
                 } else if (e.key === 'Backspace' && !tagInput.value) {
@@ -434,6 +440,18 @@
                         removeTag(currentTags[currentTags.length - 1]);
                     }
                 }
+            });
+
+            // 失去焦點時檢查是否有文字但未添加標籤
+            tagInput.addEventListener('blur', (e) => {
+                setTimeout(() => {
+                    const value = tagInput.value.trim();
+                    // 有文字但沒有添加到標籤中
+                    if (value && !allTagsCache.has(value) && !currentTags.includes(value)) {
+                        tagInput.style.border = '2px solid #ef4444';
+                        tagInput.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.1)';
+                    }
+                }, 200);
             });
 
             // 聚焦顯示建議
@@ -468,7 +486,7 @@
             // 如果輸入了文字，且該文字不在現有標籤中，顯示"創建新標籤"選項
             if (filterText && !existingTags.includes(filterText) && !currentTags.includes(filterText)) {
                 html += `
-                    <div class="suggestion-item" onclick="addTag('${filterText}'); document.getElementById('tagInput').value = ''; document.getElementById('tagsSuggestions').classList.remove('show');">
+                    <div class="suggestion-item" onclick="addTag('${filterText}'); document.getElementById('tagInput').value = ''; document.getElementById('tagsSuggestions').classList.remove('show'); document.getElementById('tagInput').style.border = ''; document.getElementById('tagInput').style.boxShadow = '';">
                         <span>${filterText}</span>
                         <span class="new-tag-badge">創建新標籤</span>
                     </div>
@@ -486,7 +504,7 @@
                 countIn(storageData.tempStorage);
 
                 html += `
-                    <div class="suggestion-item" onclick="addTag('${tag}'); document.getElementById('tagInput').value = ''; document.getElementById('tagsSuggestions').classList.remove('show');">
+                    <div class="suggestion-item" onclick="addTag('${tag}'); document.getElementById('tagInput').value = ''; document.getElementById('tagsSuggestions').classList.remove('show'); document.getElementById('tagInput').style.border = ''; document.getElementById('tagInput').style.boxShadow = '';">
                         <span>${tag}</span>
                         <span class="count-badge">${count}</span>
                     </div>
@@ -506,6 +524,9 @@
             if (tag && !currentTags.includes(tag)) {
                 currentTags.push(tag);
                 allTagsCache.add(tag);  // 新標籤添加到緩存
+                const tagInput = document.getElementById('tagInput');
+                tagInput.style.border = '';
+                tagInput.style.boxShadow = '';
                 renderTags();
             }
         }
@@ -549,6 +570,10 @@
 
             contentInput.addEventListener('input', (e) => {
                 const value = e.target.value.trim();
+                // 移除红边
+                contentInput.style.border = '';
+                contentInput.style.boxShadow = '';
+                // 显示建议
                 if (value) {
                     showContentSuggestions(value);
                 } else {
@@ -559,6 +584,20 @@
             contentInput.addEventListener('focus', () => {
                 const value = contentInput.value.trim();
                 showContentSuggestions(value);
+            });
+
+            // 失去焦点时检查是否有文字但未选择
+            contentInput.addEventListener('blur', (e) => {
+                setTimeout(() => {
+                    const value = contentInput.value.trim();
+                    const itemType = document.getElementById('itemType').value;
+                    // 只在建立容器/物件时检查
+                    if ((itemType === 'node' || itemType === 'leaf') && value && !currentContent) {
+                        // 有文字但没有选择，加红边
+                        contentInput.style.border = '2px solid #ef4444';
+                        contentInput.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.1)';
+                    }
+                }, 200);
             });
 
             document.addEventListener('click', (e) => {
@@ -572,11 +611,15 @@
             const contentSuggestions = document.getElementById('contentSuggestions');
             const filterLower = filterText.toLowerCase();
             const currentId = document.getElementById('editId').value; // 當前正在編輯的容器ID
+            const currentType = document.getElementById('itemType').value; // 當前項目類型
 
             // 直接使用緩存，避免每次都遍歷所有項目
             let candidates = allNamesCache.filter(item => {
                 if (item.id === currentId) return false; // 排除自身
                 if (currentId && isAncestorOf(item.id, currentId)) return false; // 防止循環參考
+                // 如果當前類型是容器(node)，只顯示容器；如果是物件(leaf)，只顯示物件
+                if (currentType === 'node' && item.type !== 'node') return false;
+                if (currentType === 'leaf' && item.type !== 'leaf') return false;
                 return true;
             });
 
@@ -590,14 +633,19 @@
 
             // 創建新項目選項
             if (filterText) {
-                html += `
-                    <div class="suggestion-item create-new" onclick="createNewContent('${filterText.replace(/'/g, "\\'")}', 'node')" style="background: #ecfdf5; color: #047857;">
-                        ✨ 創建新容器：<strong>"${filterText}"</strong>
-                    </div>
-                    <div class="suggestion-item create-new" onclick="createNewContent('${filterText.replace(/'/g, "\\'")}', 'leaf')" style="background: #fffbeb; color: #b45309;">
-                        ✨ 創建新物件：<strong>"${filterText}"</strong>
-                    </div>
-                `;
+                if (currentType === 'node') {
+                    html += `
+                        <div class="suggestion-item create-new" onclick="createNewContent('${filterText.replace(/'/g, "\\'")}', 'node')" style="background: #ecfdf5; color: #047857;">
+                            ✨ 創建新容器：<strong>"${filterText}"</strong>
+                        </div>
+                    `;
+                } else if (currentType === 'leaf') {
+                    html += `
+                        <div class="suggestion-item create-new" onclick="createNewContent('${filterText.replace(/'/g, "\\'")}', 'leaf')" style="background: #fffbeb; color: #b45309;">
+                            ✨ 創建新物件：<strong>"${filterText}"</strong>
+                        </div>
+                    `;
+                }
             }
 
             // 顯示現有項目
@@ -623,7 +671,10 @@
         function addContent(id, name, type, isNew = false) {
             currentContent = { id, name, type, isNew };
             renderContents();
-            document.getElementById('contentInput').value = '';
+            const contentInput = document.getElementById('contentInput');
+            contentInput.value = '';
+            contentInput.style.border = '';
+            contentInput.style.boxShadow = '';
             document.getElementById('contentSuggestions').classList.remove('show');
         }
 
@@ -1605,10 +1656,31 @@
                     return;
                 }
             } else {
+                const contentInput = document.getElementById('contentInput');
+                const hasUnselectedText = contentInput.value.trim() && !currentContent;
+
                 if (!currentContent) {
-                    alert('請選擇或輸入名稱！');
+                    if (hasUnselectedText) {
+                        alert('請從建議中選擇 新容器 或 新物件！');
+                        contentInput.style.border = '2px solid #ef4444';
+                        contentInput.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.1)';
+                        contentInput.focus();
+                    } else {
+                        alert('請選擇或輸入名稱！');
+                    }
                     return;
                 }
+            }
+
+            // 檢查標籤輸入框是否有未保存的文字
+            const tagInput = document.getElementById('tagInput');
+            const hasUnselectedTag = tagInput.value.trim() && !currentTags.includes(tagInput.value.trim());
+            if (hasUnselectedTag) {
+                alert('請添加或清空標籤輸入框！');
+                tagInput.style.border = '2px solid #ef4444';
+                tagInput.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.1)';
+                tagInput.focus();
+                return;
             }
 
             const data = {
@@ -1774,6 +1846,28 @@
             else if (type === 'leaf') item = storageData.leafs.find(l => l.id === id);
 
             if (item) {
+                // 清除輸入框文本
+                const contentInput = document.getElementById('contentInput');
+                if (contentInput) {
+                    contentInput.value = '';
+                }
+
+                const tagInput = document.getElementById('tagInput');
+                if (tagInput) {
+                    tagInput.value = '';
+                }
+
+                // 關閉建議下拉列表
+                const tagsSuggestions = document.getElementById('tagsSuggestions');
+                if (tagsSuggestions) {
+                    tagsSuggestions.classList.remove('show');
+                }
+
+                const contentSuggestions = document.getElementById('contentSuggestions');
+                if (contentSuggestions) {
+                    contentSuggestions.classList.remove('show');
+                }
+
                 // 自動切換到"添加項目"分頁
                 switchTab('form');
                 isAddingToSpecificParent = false;
